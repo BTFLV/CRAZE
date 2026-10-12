@@ -1,32 +1,14 @@
-# Prerequisites
-*.d
+# Rust
+/target/
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
+# Frontend
+/app/node_modules/
+/app/dist/
 
-# Precompiled Headers
-*.gch
-*.pch
+# Tauri generated schemas
+/app/src-tauri/gen/schemas/
 
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.exe
-*.out
-*.app
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
