@@ -42,7 +42,7 @@ graph TD
 | `simulate` | The pipeline: rasterize → build → solve → post-process; `Summary`, `Stats`, `Fields`, progress reporting and cancellation. |
 | `materials` | Material library (bulk values at 20 °C) and `Stack` → R□(T). |
 | `optimize` | Width optimizer (secant iteration on log R over log s). |
-| `error` | `CrazeError`. Messages are user-facing and currently German. |
+| `error` | `CrazeError`. Messages are user-facing English; the app translates them for its German UI (`app/src/lib/messages.ts`). |
 
 The numerical details are in [numerics.md](numerics.md).
 
@@ -209,7 +209,7 @@ components.
 **Internationalization.** `lib/i18n.ts` holds German (default) and English dictionaries;
 `t("section.key", params)` looks up the current language. Numbers are formatted by
 `lib/format.ts` with the locale in `lib/locale.svelte.ts`. Messages produced by
-`craze-core` and the backend are German regardless of the UI language.
+`craze-core` and the backend are English; `lib/messages.ts` translates them for the German UI.
 
 **Persistence.**
 

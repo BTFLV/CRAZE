@@ -86,10 +86,10 @@ pub fn make_grid(area: BBox, explicit: bool, resolution: u32) -> Grid {
 
 pub fn rasterize(layout: &FlatLayout, setup: &Setup, resolution: u32) -> Result<Raster> {
     let (area, explicit) = simulation_area(layout, setup)
-        .ok_or_else(|| CrazeError::Setup("Keine Geometrie auf Leiter- oder Terminal-Layern gefunden.".into()))?;
+        .ok_or_else(|| CrazeError::Setup("No geometry found on conductor or terminal layers.".into()))?;
     let grid = make_grid(area, explicit, resolution);
     if grid.len() > 60_000_000 {
-        return Err(CrazeError::Setup("Auflösung ist zu hoch (mehr als 60 Mio. Pixel).".into()));
+        return Err(CrazeError::Setup("The resolution is too high (more than 60 million pixels).".into()));
     }
     let keys_for = |pred: &dyn Fn(Role) -> bool| -> Vec<LayerKey> { setup.keys_with(pred) };
     let conductor = rasterize_layers(layout, &keys_for(&|r| r == Role::Conductor), &grid);

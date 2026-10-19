@@ -2,6 +2,7 @@
   import { Target, Square, Save, TriangleAlert, CircleCheck, Info, FolderOpen } from "@lucide/svelte";
   import { store } from "../../lib/store.svelte";
   import { t } from "../../lib/i18n";
+  import { localize } from "../../lib/messages";
   import { length, num, si, sig } from "../../lib/format";
   import NumInput from "../NumInput.svelte";
   import Chart from "../Chart.svelte";
@@ -39,7 +40,7 @@
     <div class="hint warn"><TriangleAlert size={14} /><span>{p}</span></div>
   {/each}
   {#if store.job?.kind === "optimize"}
-    <div class="muted small">{store.job.message}</div>
+    <div class="muted small">{localize(store.job.message)}</div>
     <button class="btn block big" onclick={() => store.cancel()}><Square size={15} />{t("simulate.cancel")}</button>
   {:else}
     <button

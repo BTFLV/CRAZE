@@ -1,0 +1,368 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Check version and changelog
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check that the tag matches the project version
+        id: version
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          cargo=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          npm=$(node -p "require('./app/package.json').version")
+          tauri=$(node -p "require('./app/src-tauri/tauri.conf.json').version")
+          for v in "$cargo" "$npm" "$tauri"; do
+            if [ "$v" != "$version" ]; then
+              echo "::error::Tag $GITHUB_REF_NAME does not match the versions in Cargo.toml ($cargo), app/package.json ($npm) and tauri.conf.json ($tauri)"
+              exit 1
+            fi
+          done
+          if ! grep -q "^## $version " CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no section for $version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  test:
+    name: Test
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: test
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Build frontend and run svelte-check
+        working-directory: app
+        run: |
+          npm ci
+          npm run check
+          npm run build
+
+      - name: cargo test
+        run: cargo test --workspace
+
+  macos:
+    name: Build macOS (universal)
+    needs: [check, test]
+    runs-on: macos-latest
+    timeout-minutes: 120
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-macos
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: app
+        run: npm ci
+
+      # Signing is optional. With a Developer ID certificate the app and disk image are
+      # signed; with an App Store Connect API key they are also notarized and stapled.
+      # Without these secrets the release is built ad-hoc signed. Variables are exported
+      # only when set, because empty signing variables make the Tauri bundler fail.
+      - name: Configure signing
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY_CONTENT }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ] || [ -z "$APPLE_SIGNING_IDENTITY" ]; then
+            echo "No signing certificate configured; the app is ad-hoc signed."
+            config="$RUNNER_TEMP/tauri.signing.json"
+            echo '{"bundle":{"macOS":{"signingIdentity":"-"}}}' > "$config"
+            echo "TAURI_EXTRA_ARGS=--config $config" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password=$(openssl rand -base64 24)
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$keychain"
+          rm "$RUNNER_TEMP/certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" \
+            "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          echo "SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+          # Tauri finds the identity in the keychain search list and signs with the
+          # hardened runtime.
+          echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+          if [ -n "$APPLE_API_KEY" ] && [ -n "$APPLE_API_ISSUER" ] && [ -n "$APPLE_API_KEY_CONTENT" ]; then
+            key_path="$RUNNER_TEMP/AuthKey_$APPLE_API_KEY.p8"
+            printf '%s' "$APPLE_API_KEY_CONTENT" > "$key_path"
+            chmod 600 "$key_path"
+            {
+              echo "APPLE_API_KEY=$APPLE_API_KEY"
+              echo "APPLE_API_ISSUER=$APPLE_API_ISSUER"
+              echo "APPLE_API_KEY_PATH=$key_path"
+            } >> "$GITHUB_ENV"
+            echo "Signing with a Developer ID and notarizing with an App Store Connect API key."
+          else
+            echo "Signing with a Developer ID without notarization."
+          fi
+
+      - name: Build app
+        uses: tauri-apps/tauri-action@v1
+        with:
+          projectPath: app
+          args: --target universal-apple-darwin ${{ env.TAURI_EXTRA_ARGS }}
+
+      - name: Sign, notarize and verify the disk image
+        run: |
+          bundle=target/universal-apple-darwin/release/bundle
+          app="$bundle/macos/CRAZE.app"
+          dmg="dist/CRAZE-$VERSION-macOS-universal.dmg"
+          mkdir -p dist
+          cp "$(ls "$bundle"/dmg/*.dmg | head -n1)" "$dmg"
+
+          signed=false
+          notarized=false
+          if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
+            signed=true
+            codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$dmg"
+            if [ -n "${APPLE_API_KEY_PATH:-}" ]; then
+              notarized=true
+              result=$(xcrun notarytool submit "$dmg" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" \
+                --issuer "$APPLE_API_ISSUER" --wait --timeout 1h --output-format json)
+              echo "$result"
+              status=$(printf '%s' "$result" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status", ""))')
+              if [ "$status" != "Accepted" ]; then
+                id=$(printf '%s' "$result" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id", ""))')
+                [ -n "$id" ] && xcrun notarytool log "$id" --key "$APPLE_API_KEY_PATH" \
+                  --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" || true
+                echo "::error::Notarization of the disk image failed: $status"
+                exit 1
+              fi
+              xcrun stapler staple "$dmg"
+              xcrun stapler validate "$dmg"
+              xcrun stapler validate "$app"
+            fi
+          fi
+
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dv --verbose=2 "$app" 2>&1 | grep -E "Authority|TeamIdentifier|Runtime|Signature" || true
+          if $notarized; then
+            spctl --assess --type execute --verbose=2 "$app"
+            spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
+          fi
+          echo "macos_signed=$signed" > dist/signing-macos.txt
+          echo "macos_notarized=$notarized" >> dist/signing-macos.txt
+          echo "::notice title=macOS::signed=$signed notarized=$notarized"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-macos
+          path: dist/
+          if-no-files-found: error
+
+      - name: Remove signing keychain
+        if: always()
+        run: |
+          if [ -n "${SIGNING_KEYCHAIN:-}" ]; then security delete-keychain "$SIGNING_KEYCHAIN"; fi
+          rm -f "$RUNNER_TEMP"/AuthKey_*.p8
+
+  windows:
+    name: Build Windows (x64)
+    needs: [check, test]
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-windows
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: app
+        run: npm ci
+
+      # Optional: a code-signing certificate as base64 .pfx. Without it the build is unsigned.
+      - name: Configure signing
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+        run: |
+          if (-not $env:WINDOWS_CERTIFICATE) {
+            Write-Output "No signing certificate configured; the installers are unsigned."
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP "certificate.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $password = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          Remove-Item $pfx
+          $timestamp = if ($env:WINDOWS_TIMESTAMP_URL) { $env:WINDOWS_TIMESTAMP_URL } else { "http://timestamp.digicert.com" }
+          $config = Join-Path $env:RUNNER_TEMP "tauri.signing.json"
+          @{ bundle = @{ windows = @{
+            certificateThumbprint = $cert.Thumbprint
+            digestAlgorithm = "sha256"
+            timestampUrl = $timestamp
+          } } } | ConvertTo-Json -Depth 5 | Set-Content -Path $config -Encoding utf8
+          "TAURI_EXTRA_ARGS=--config $config" >> $env:GITHUB_ENV
+          Write-Output "Signing with certificate $($cert.Thumbprint)."
+
+      - name: Build app
+        uses: tauri-apps/tauri-action@v1
+        with:
+          projectPath: app
+          args: ${{ env.TAURI_EXTRA_ARGS }}
+
+      - name: Collect installers
+        shell: pwsh
+        run: |
+          $bundle = "target/release/bundle"
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item (Get-ChildItem "$bundle/nsis/*-setup.exe" | Select-Object -First 1) "dist/CRAZE-$env:VERSION-Windows-x64-setup.exe"
+          Copy-Item (Get-ChildItem "$bundle/msi/*.msi" | Select-Object -First 1) "dist/CRAZE-$env:VERSION-Windows-x64.msi"
+          $signed = $true
+          Get-ChildItem dist/*.exe, dist/*.msi | ForEach-Object {
+            $sig = Get-AuthenticodeSignature $_.FullName
+            Write-Output "$($_.Name): $($sig.Status) $($sig.SignerCertificate.Subject)"
+            if ($sig.Status -ne "Valid") { $signed = $false }
+          }
+          "windows_signed=$($signed.ToString().ToLower())" | Set-Content dist/signing-windows.txt
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-windows
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: [check, macos, windows]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Write checksums and release notes
+        run: |
+          cat dist/signing-*.txt > signing.env
+          rm dist/signing-*.txt
+          . ./signing.env
+          (cd dist && sha256sum CRAZE-* > SHA256SUMS.txt && cat SHA256SUMS.txt)
+
+          awk -v version="$VERSION" '
+            $0 ~ "^## " version " " { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          {
+            echo
+            echo "### Download"
+            echo
+            echo "| Platform | File |"
+            echo "| --- | --- |"
+            echo "| macOS, Apple Silicon and Intel | \`CRAZE-$VERSION-macOS-universal.dmg\` |"
+            echo "| Windows 10/11 x64, installer | \`CRAZE-$VERSION-Windows-x64-setup.exe\` |"
+            echo "| Windows 10/11 x64, MSI | \`CRAZE-$VERSION-Windows-x64.msi\` |"
+            echo
+            echo "Verify downloads against \`SHA256SUMS.txt\`."
+            echo
+            if [ "$macos_notarized" = "true" ]; then
+              echo "The macOS app and disk image are signed with a Developer ID and notarized by Apple."
+            elif [ "$macos_signed" = "true" ]; then
+              echo "The macOS app is signed with a Developer ID but not notarized."
+            else
+              echo "The macOS app is not signed with a Developer ID. If macOS blocks it, open it via"
+              echo "*System Settings → Privacy & Security → Open Anyway*."
+            fi
+            if [ "$windows_signed" = "true" ]; then
+              echo "The Windows installers are signed."
+            else
+              echo "The Windows installers are not code-signed. If SmartScreen warns, choose"
+              echo "*More info → Run anyway*."
+            fi
+          } >> notes.md
+          cat notes.md
+
+      # The project used a rolling release on the tag "latest" before 1.0.0.
+      - name: Remove the old rolling release
+        run: |
+          if gh release view latest > /dev/null 2>&1; then
+            gh release delete latest --cleanup-tag --yes
+          elif gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/latest" > /dev/null 2>&1; then
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/latest"
+          fi
+
+      - name: Publish release
+        run: |
+          # A re-pushed tag refreshes the existing release instead of failing.
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+            gh release edit "$GITHUB_REF_NAME" --title "CRAZE $VERSION" --notes-file notes.md --latest
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* \
+              --title "CRAZE $VERSION" --notes-file notes.md --verify-tag --latest
+          fi

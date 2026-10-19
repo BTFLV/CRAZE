@@ -158,17 +158,17 @@ fn best_top(lib: &Library) -> CmdResult<(String, FlatLayout)> {
             best = Some((top, flat, n));
         }
     }
-    best.map(|(t, f, _)| (t, f)).ok_or_else(|| "Die Datei enthält keine Zellen.".to_string())
+    best.map(|(t, f, _)| (t, f)).ok_or_else(|| "The file contains no cells.".to_string())
 }
 
 impl Backend {
     fn loaded(&self) -> CmdResult<Arc<Loaded>> {
-        self.loaded.lock().unwrap().clone().ok_or_else(|| "Es ist kein Layout geladen.".to_string())
+        self.loaded.lock().unwrap().clone().ok_or_else(|| "No layout is loaded.".to_string())
     }
 
     fn start_job(&self) -> CmdResult<BusyGuard> {
         if self.busy.swap(true, Ordering::SeqCst) {
-            return Err("Es läuft bereits eine Berechnung.".into());
+            return Err("A computation is already running.".into());
         }
         self.cancel.store(false, Ordering::SeqCst);
         Ok(BusyGuard(self.busy.clone()))
@@ -180,7 +180,7 @@ impl Backend {
 
     pub fn open_layout(&self, path: &str, top_cell: Option<String>) -> CmdResult<LayoutInfo> {
         let p = PathBuf::from(path);
-        let bytes = std::fs::read(&p).map_err(|e| format!("Datei kann nicht gelesen werden: {e}"))?;
+        let bytes = std::fs::read(&p).map_err(|e| format!("Cannot read the file: {e}"))?;
         let library = Library::from_bytes(&bytes).map_err(err)?;
         let (top, flat) = match top_cell {
             Some(t) if library.structures.iter().any(|s| s.name == t) => {
@@ -190,7 +190,7 @@ impl Backend {
             _ => best_top(&library)?,
         };
         if flat.shapes.is_empty() {
-            return Err("Die Zelle enthält keine Geometrie.".into());
+            return Err("The cell contains no geometry.".into());
         }
         let loaded = Loaded { path: p, library, top, flat };
         let info = layout_info(&loaded);
@@ -241,7 +241,7 @@ impl Backend {
 
     /// u32 nx, u32 ny, then potential, jx, jy, coverage (f32 each), material (u8).
     pub fn result_fields(&self) -> CmdResult<Vec<u8>> {
-        let r = self.result.lock().unwrap().clone().ok_or("Keine Ergebnisse vorhanden.")?;
+        let r = self.result.lock().unwrap().clone().ok_or("No results available.")?;
         let f = &r.fields;
         let g = &r.summary.grid;
         let n = g.nx * g.ny;
@@ -308,7 +308,7 @@ impl Backend {
         let l = self.loaded()?;
         let keys: HashSet<LayerKey> = conductor_keys.into_iter().collect();
         let recs = l.library.with_scaled_path_widths(&keys, scale);
-        std::fs::write(path, records::write_binary(&recs)).map_err(|e| format!("Speichern fehlgeschlagen: {e}"))
+        std::fs::write(path, records::write_binary(&recs)).map_err(|e| format!("Saving failed: {e}"))
     }
 }
 

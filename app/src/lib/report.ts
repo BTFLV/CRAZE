@@ -4,6 +4,7 @@ import { duration, length, num, sci, si, sig } from "./format";
 import { sheetResistance, volumeCurrentFactor, type Electrical } from "./physics";
 import { keyStr } from "./types";
 import { materialName } from "./i18n";
+import { localize } from "./messages";
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
@@ -84,7 +85,7 @@ ${setup.terminals.map((tm, i) => `<tr><td>${T("Potential", "Potential")} ${esc(t
 <tr><td>${T("Rechenzeit", "Computation time")}</td><td class="r">${duration(st.timeRasterMs + st.timeBuildMs + st.timeSolveMs + st.timePostMs)}</td></tr>
 ${extrap ? `<tr><td>${T("Extrapoliert (∞ Pixel)", "Extrapolated (∞ pixels)")}</td><td class="r">${si(extrap.value * store.sheetResistance, "Ω", 6)} (${T("Fehler", "error")} ≈ ${sig(extrap.err * 100, 2)} %)</td></tr>` : ""}
 </table>
-${s.warnings.length ? `<h2>${T("Hinweise", "Notes")}</h2><ul>${s.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : ""}
-<p class="sub" style="margin-top:32px">CRAZE 2.0</p>
+${s.warnings.length ? `<h2>${T("Hinweise", "Notes")}</h2><ul>${s.warnings.map((w) => `<li>${esc(localize(w))}</li>`).join("")}</ul>` : ""}
+<p class="sub" style="margin-top:32px">CRAZE ${__APP_VERSION__}</p>
 </body></html>`;
 }

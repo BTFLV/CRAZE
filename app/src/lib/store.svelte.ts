@@ -3,6 +3,7 @@ import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialo
 import * as api from "./api";
 import type { ColormapName } from "./colormaps";
 import { setLocale } from "./format";
+import { CANCELLED, errorText } from "./messages";
 import type { DisplayField } from "./display";
 import { sheetResistance } from "./physics";
 import {
@@ -315,7 +316,7 @@ class Store {
       if (!keepSetup) this.settings.resolution = this.recommendedResolution() ?? 1000;
       return true;
     } catch (e) {
-      this.toast("error", String(e), 8000);
+      this.toast("error", errorText(e), 8000);
       return false;
     } finally {
       this.busyLoading = false;
@@ -413,9 +414,9 @@ class Store {
       this.step = "results";
     } catch (e) {
       const msg = String(e);
-      if (msg !== "Abgebrochen") {
+      if (msg !== CANCELLED) {
         this.lastError = msg;
-        this.toast("error", msg, 10000);
+        this.toast("error", errorText(msg), 10000);
       }
     } finally {
       this.job = null;
@@ -440,7 +441,7 @@ class Store {
         this.job = { kind: "study", message: `${p.resolution} px`, fraction: this.study.length / list.length };
       });
     } catch (e) {
-      if (String(e) !== "Abgebrochen") this.toast("error", String(e), 8000);
+      if (String(e) !== CANCELLED) this.toast("error", errorText(e), 8000);
     } finally {
       this.job = null;
     }
@@ -471,7 +472,7 @@ class Store {
       this.optResult = res;
       this.optSteps = res.steps;
     } catch (e) {
-      if (String(e) !== "Abgebrochen") this.toast("error", String(e), 8000);
+      if (String(e) !== CANCELLED) this.toast("error", errorText(e), 8000);
     } finally {
       this.job = null;
     }
@@ -490,7 +491,7 @@ class Store {
       this.toast("ok", this.lang === "de" ? "Optimiertes Layout gespeichert." : "Optimized layout saved.");
       return path;
     } catch (e) {
-      this.toast("error", String(e));
+      this.toast("error", errorText(e));
     }
   }
 
@@ -532,7 +533,7 @@ class Store {
       this.addRecent({ path, name: path.split(/[\\/]/).pop() ?? path, kind: "project" });
       this.toast("ok", this.lang === "de" ? "Projekt gespeichert." : "Project saved.");
     } catch (e) {
-      this.toast("error", String(e));
+      this.toast("error", errorText(e));
     }
   }
 

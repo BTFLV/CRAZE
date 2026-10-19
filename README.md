@@ -1,4 +1,4 @@
-# CRAZE
+# <img src="docs/images/icon.png" width="44" alt="" align="top"> CRAZE
 
 **2D resistance simulation for thin-film layouts.**
 
@@ -27,7 +27,6 @@ make the simple *length / width* estimate inaccurate.
 ## Contents
 
 - [Download](#download)
-- [Opening an unsigned build](#opening-an-unsigned-build)
 - [User guide](#user-guide)
 - [Preparing layouts in KLayout](#preparing-layouts-in-klayout)
 - [Concepts](#concepts)
@@ -39,35 +38,25 @@ make the simple *length / width* estimate inaccurate.
 
 ## Download
 
-Every push to `main` is built automatically and published as the
-[**Latest CRAZE Release**](https://github.com/BTFLV/CRAZE/releases/tag/latest):
+Get the latest version from
+[**Releases**](https://github.com/BTFLV/CRAZE/releases/latest):
 
 | Platform | File |
 | --- | --- |
-| macOS, Apple Silicon and Intel | [`CRAZE-macOS-universal.dmg`](https://github.com/BTFLV/CRAZE/releases/download/latest/CRAZE-macOS-universal.dmg) |
-| Windows 10/11 x64, installer | [`CRAZE-Windows-x64-setup.exe`](https://github.com/BTFLV/CRAZE/releases/download/latest/CRAZE-Windows-x64-setup.exe) |
-| Windows 10/11 x64, MSI | [`CRAZE-Windows-x64.msi`](https://github.com/BTFLV/CRAZE/releases/download/latest/CRAZE-Windows-x64.msi) |
+| macOS, Apple Silicon and Intel | `CRAZE-<version>-macOS-universal.dmg` |
+| Windows 10/11 x64, installer | `CRAZE-<version>-Windows-x64-setup.exe` |
+| Windows 10/11 x64, MSI | `CRAZE-<version>-Windows-x64.msi` |
 
-The release notes list the commit the build was made from and whether it is signed.
+Each release lists its changes (see also [CHANGELOG.md](CHANGELOG.md)), states how the
+files are signed, and includes `SHA256SUMS.txt` to verify the downloads.
 
-## Opening an unsigned build
+**macOS.** Open the DMG and drag CRAZE into *Applications*. Release builds are signed
+with a Developer ID and notarized by Apple.
 
-Until code-signing certificates are set up, the builds are not signed by a known
-developer, and both operating systems warn on first start.
-
-**macOS.** Open the DMG and drag CRAZE into *Applications*. The first time you start
-it, macOS reports that it cannot verify the app. Close the dialog, open
-*System Settings → Privacy & Security*, scroll down to the message about CRAZE, click
-**Open Anyway** and confirm. You only need to do this once. If macOS instead says the
-app is *damaged*, remove the download quarantine flag in Terminal:
-
-```sh
-xattr -dr com.apple.quarantine /Applications/CRAZE.app
-```
-
-**Windows.** SmartScreen shows *Windows protected your PC*. Click **More info**, then
-**Run anyway**. The installer installs CRAZE for the current user. It uses the WebView2
-runtime that ships with Windows 10/11 and downloads it if it is missing.
+**Windows.** The installers are not code-signed yet, so SmartScreen shows *Windows
+protected your PC*. Click **More info**, then **Run anyway**. The installer installs CRAZE
+for the current user. It uses the WebView2 runtime that ships with Windows 10/11 and
+downloads it if it is missing.
 
 ## User guide
 
@@ -325,9 +314,7 @@ craze optimize examples/Pt1000_meander.gds --target 1000 --rsheet 0.98 --out mea
 | `--json` | (`simulate`) Print the full summary, including all terminal potentials, as JSON. |
 | `--target`, `--tol`, `--iterations`, `--out` | (`optimize`) Target in Ω, relative tolerance (default 0.002), maximum steps (default 10), output file. |
 
-`craze --help` and `craze <command> --help` list all options. Progress messages, warnings
-and errors that come from the simulation engine are currently in German, in the app as well
-as in the CLI.
+`craze --help` and `craze <command> --help` list all options.
 
 ## How it works
 
@@ -353,6 +340,7 @@ documentation:
 - [Architecture](docs/architecture.md): crates, data flow, IPC, state and rendering
 - [Numerics](docs/numerics.md): discretization, solvers, validation and limitations
 - [Building](docs/building.md), [Testing](docs/testing.md), [Releasing](docs/releasing.md)
+- [Changelog](CHANGELOG.md)
 
 ## Keyboard shortcuts
 

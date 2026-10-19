@@ -189,7 +189,7 @@ pub fn read_binary(bytes: &[u8]) -> Result<Vec<Record>> {
         }
         if len < 4 || pos + len > bytes.len() {
             return Err(CrazeError::Gds(format!(
-                "Beschädigter Datensatz an Byte {pos} (Länge {len})"
+                "corrupt record at byte {pos} (length {len})"
             )));
         }
         let payload = &bytes[pos + 4..pos + len];
@@ -210,7 +210,7 @@ pub fn read_binary(bytes: &[u8]) -> Result<Vec<Record>> {
                 let end = payload.iter().position(|&b| b == 0).unwrap_or(payload.len());
                 RecordData::Ascii(String::from_utf8_lossy(&payload[..end]).into_owned())
             }
-            other => return Err(CrazeError::Gds(format!("Unbekannter Datentyp {other} an Byte {pos}"))),
+            other => return Err(CrazeError::Gds(format!("unknown data type {other} at byte {pos}"))),
         };
         let done = rtype == rt::ENDLIB;
         out.push(Record { rtype, data });
@@ -335,10 +335,10 @@ pub fn read_text(src: &str) -> Result<Vec<Record>> {
         if !is_keyword {
             match xy_acc.as_mut() {
                 Some(acc) => {
-                    parse_xy_pairs(line, acc).map_err(|e| CrazeError::Gds(format!("Zeile {}: {e}", lineno + 1)))?
+                    parse_xy_pairs(line, acc).map_err(|e| CrazeError::Gds(format!("line {}: {e}", lineno + 1)))?
                 }
                 None => {
-                    return Err(CrazeError::Gds(format!("Zeile {}: unerwartete Daten '{line}'", lineno + 1)));
+                    return Err(CrazeError::Gds(format!("line {}: unexpected data '{line}'", lineno + 1)));
                 }
             }
             continue;
@@ -350,7 +350,7 @@ pub fn read_text(src: &str) -> Result<Vec<Record>> {
             // Unknown keywords (PROPATTR, ...) are irrelevant for simulation.
             continue;
         };
-        let err = |m: &str| CrazeError::Gds(format!("Zeile {}: {m} in '{line}'", lineno + 1));
+        let err = |m: &str| CrazeError::Gds(format!("line {}: {m} in '{line}'", lineno + 1));
         let data = match (rtype, dtype) {
             (rt::XY, _) => {
                 let mut acc = Vec::new();
@@ -362,17 +362,17 @@ pub fn read_text(src: &str) -> Result<Vec<Record>> {
             (_, dt::NONE) => RecordData::None,
             (_, dt::ASCII) => RecordData::Ascii(rest.to_string()),
             (_, dt::BITARRAY) => {
-                let v: i64 = rest.split_whitespace().next().unwrap_or("0").parse().map_err(|_| err("Zahl erwartet"))?;
+                let v: i64 = rest.split_whitespace().next().unwrap_or("0").parse().map_err(|_| err("number expected"))?;
                 RecordData::BitArray(v as i16 as u16)
             }
             (_, dt::I16) => RecordData::I16(
-                rest.split_whitespace().map(|t| t.parse::<i16>()).collect::<std::result::Result<_, _>>().map_err(|_| err("Ganzzahl erwartet"))?,
+                rest.split_whitespace().map(|t| t.parse::<i16>()).collect::<std::result::Result<_, _>>().map_err(|_| err("integer expected"))?,
             ),
             (_, dt::I32) => RecordData::I32(
-                rest.split_whitespace().map(|t| t.parse::<i32>()).collect::<std::result::Result<_, _>>().map_err(|_| err("Ganzzahl erwartet"))?,
+                rest.split_whitespace().map(|t| t.parse::<i32>()).collect::<std::result::Result<_, _>>().map_err(|_| err("integer expected"))?,
             ),
             (_, dt::REAL8) => RecordData::Real(
-                rest.split_whitespace().map(|t| t.parse::<f64>()).collect::<std::result::Result<_, _>>().map_err(|_| err("Zahl erwartet"))?,
+                rest.split_whitespace().map(|t| t.parse::<f64>()).collect::<std::result::Result<_, _>>().map_err(|_| err("number expected"))?,
             ),
             _ => RecordData::None,
         };
@@ -380,7 +380,7 @@ pub fn read_text(src: &str) -> Result<Vec<Record>> {
     }
     flush_xy(&mut xy_acc, &mut out);
     if out.is_empty() {
-        return Err(CrazeError::Gds("Datei enthält keine GDSII-Daten".into()));
+        return Err(CrazeError::Gds("the file contains no GDSII data".into()));
     }
     Ok(out)
 }
@@ -389,7 +389,7 @@ fn parse_xy_pairs(s: &str, acc: &mut Vec<i32>) -> std::result::Result<(), String
     // Format: "x: y" possibly several per line, separated by whitespace or ';'.
     let cleaned = s.replace(':', " ").replace(';', " ").replace(',', " ");
     for tok in cleaned.split_whitespace() {
-        let v: f64 = tok.parse().map_err(|_| format!("ungültige Koordinate '{tok}'"))?;
+        let v: f64 = tok.parse().map_err(|_| format!("invalid coordinate '{tok}'"))?;
         acc.push(v.round() as i32);
     }
     Ok(())

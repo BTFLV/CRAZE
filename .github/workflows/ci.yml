@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: test
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: svelte-check
+        working-directory: app
+        run: npm run check
+
+      # Tauri's generate_context! needs app/dist, otherwise the workspace does not compile.
+      - name: Build frontend
+        working-directory: app
+        run: npm run build
+
+      - name: cargo test
+        run: cargo test --workspace
+
+  # Unsigned builds to catch platform-specific breakage. Releases are built by release.yml.
+  build:
+    name: Build (${{ matrix.name }})
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            platform: macos-latest
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            args: --target universal-apple-darwin
+            bundle: target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          - name: Windows
+            platform: windows-latest
+            rust-targets: ""
+            args: ""
+            bundle: |
+              target/release/bundle/nsis/*-setup.exe
+              target/release/bundle/msi/*.msi
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: build-${{ matrix.platform }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: app
+        run: npm ci
+
+      # A universal binary needs a valid signature to launch on Apple Silicon; sign it ad hoc.
+      - name: Configure ad-hoc signing
+        if: runner.os == 'macOS'
+        run: |
+          config="$RUNNER_TEMP/tauri.signing.json"
+          echo '{"bundle":{"macOS":{"signingIdentity":"-"}}}' > "$config"
+          echo "TAURI_EXTRA_ARGS=--config $config" >> "$GITHUB_ENV"
+
+      - name: Build app
+        uses: tauri-apps/tauri-action@v1
+        with:
+          projectPath: app
+          args: ${{ matrix.args }} ${{ env.TAURI_EXTRA_ARGS }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: craze-${{ matrix.name }}-unsigned
+          path: ${{ matrix.bundle }}
+          retention-days: 14
+          if-no-files-found: error

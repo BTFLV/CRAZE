@@ -2,8 +2,8 @@
 //!
 //! * Direct: sparse Cholesky (faer, AMD ordering). Robust and fast for typical sizes.
 //! * Iterative: conjugate gradients preconditioned with an incomplete Cholesky
-//!   factorization IC(0). Needs far less memory and converges much faster than the
-//!   Jacobi preconditioner used in CRAZE 1.
+//!   factorization IC(0). Needs far less memory and converges much faster than a
+//!   Jacobi preconditioner.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -96,10 +96,10 @@ pub fn solve_direct(a: &Csr, b: &[f64]) -> Result<Vec<f64>> {
         }
     }
     let m = SparseColMat::<usize, f64>::try_new_from_triplets(a.n, a.n, &trip)
-        .map_err(|e| CrazeError::Solver(format!("Matrix ungültig: {e:?}")))?;
+        .map_err(|e| CrazeError::Solver(format!("invalid matrix: {e:?}")))?;
     let llt = m
         .sp_cholesky(Side::Lower)
-        .map_err(|e| CrazeError::Solver(format!("Cholesky-Zerlegung fehlgeschlagen: {e:?}")))?;
+        .map_err(|e| CrazeError::Solver(format!("Cholesky factorization failed: {e:?}")))?;
     let rhs = Mat::<f64>::from_fn(a.n, 1, |i, _| b[i]);
     let x = llt.solve(&rhs);
     Ok((0..a.n).map(|i| x[(i, 0)]).collect())
@@ -250,7 +250,7 @@ pub fn solve_pcg(
     progress(it, rel);
     if rel > tol * 100.0 {
         return Err(CrazeError::Solver(format!(
-            "Keine Konvergenz nach {it} Iterationen (rel. Residuum {rel:.2e}). Iterationen erhöhen oder direkten Löser verwenden."
+            "No convergence after {it} iterations (relative residual {rel:.2e}). Increase the iterations or use the direct solver."
         )));
     }
     Ok((x, it, rel))

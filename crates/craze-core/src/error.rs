@@ -1,19 +1,20 @@
 use thiserror::Error;
 
-/// Errors carry user-facing (German) messages; they are shown directly in the UI.
+/// Errors carry user-facing English messages. The app translates them for its German UI
+/// (see app/src/lib/messages.ts), so keep both in sync when changing a message.
 #[derive(Debug, Error)]
 pub enum CrazeError {
-    #[error("GDS-Fehler: {0}")]
+    #[error("GDS error: {0}")]
     Gds(String),
     #[error("{0}")]
     Setup(String),
-    #[error("Solver-Fehler: {0}")]
+    #[error("Solver error: {0}")]
     Solver(String),
-    #[error("Abgebrochen")]
+    #[error("Cancelled")]
     Cancelled,
-    #[error("Dateifehler: {0}")]
+    #[error("File error: {0}")]
     Io(#[from] std::io::Error),
-    #[error("Formatfehler: {0}")]
+    #[error("Format error: {0}")]
     Json(#[from] serde_json::Error),
 }
 

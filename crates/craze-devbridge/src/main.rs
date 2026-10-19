@@ -61,7 +61,7 @@ fn handle(b: &Backend, prefs: &mut Value, cmd: &str, a: &Value) -> Result<Out, S
         "read_text_file" => ok(json!(std::fs::read_to_string(arg::<String>(a, "path")?).map_err(|e| e.to_string())?)),
         "write_base64_file" => ok(Value::Null),
         "startup_file" => ok(json!(std::env::var("CRAZE_TEST_FILE").ok())),
-        other => Err(format!("unbekannter Befehl {other}")),
+        other => Err(format!("unknown command {other}")),
     }
 }
 

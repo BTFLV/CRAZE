@@ -2,6 +2,7 @@
   import { Play, Square, TriangleAlert, Lightbulb, ArrowRight, CircleCheck } from "@lucide/svelte";
   import { store } from "../../lib/store.svelte";
   import { t } from "../../lib/i18n";
+  import { localize } from "../../lib/messages";
   import { duration, length, num, si } from "../../lib/format";
   import NumInput from "../NumInput.svelte";
 
@@ -123,7 +124,7 @@
   {/if}
   {#if store.job?.kind === "simulate"}
     <div class="progress">
-      <div class="msg">{store.job.message || t("simulate.running")}</div>
+      <div class="msg">{localize(store.job.message) || t("simulate.running")}</div>
       <div class="bar" class:indet={store.job.fraction == null}>
         <div style:width="{(store.job.fraction ?? 0.35) * 100}%"></div>
       </div>
@@ -135,7 +136,7 @@
     </button>
   {/if}
   {#if store.lastError && !store.job}
-    <div class="hint error"><TriangleAlert size={14} /><span style="white-space: pre-line">{store.lastError}</span></div>
+    <div class="hint error"><TriangleAlert size={14} /><span style="white-space: pre-line">{localize(store.lastError)}</span></div>
   {/if}
   {#if store.summary && !store.job}
     <div class="hint ok">

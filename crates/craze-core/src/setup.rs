@@ -86,28 +86,28 @@ impl Setup {
         self.keys_with(|r| r == Role::Conductor)
     }
 
-    /// Checks the setup for problems the user can fix. Returns German messages.
+    /// Checks the setup for problems the user can fix. Returns English messages.
     pub fn validate(&self, layout: &FlatLayout) -> Vec<String> {
         let mut errs = Vec::new();
         if self.conductor_keys().is_empty() {
-            errs.push("Es ist kein Layer als Leiter (Widerstandsschicht) zugeordnet.".into());
+            errs.push("No layer is assigned as conductor (resistive film).".into());
         }
         if self.terminals.len() < 2 {
-            errs.push("Es werden mindestens zwei Terminals benötigt.".into());
+            errs.push("At least two terminals are required.".into());
         }
         if self.source == self.sink {
-            errs.push("Plus- und Minus-Terminal müssen verschieden sein.".into());
+            errs.push("Plus and minus terminal must be different.".into());
         }
         for (i, t) in self.terminals.iter().enumerate() {
             let has_shapes = self.layers.iter().any(|a| {
                 a.role == Role::Terminal { id: i } && layout.shapes.get(&a.key).is_some_and(|s| !s.is_empty())
             });
             if !has_shapes && (i == self.source || i == self.sink) {
-                errs.push(format!("Terminal „{}“ hat keine Geometrie – bitte einen Layer zuordnen.", t.name));
+                errs.push(format!("Terminal “{}” has no geometry. Please assign a layer.", t.name));
             }
         }
         if self.source >= self.terminals.len() || self.sink >= self.terminals.len() {
-            errs.push("Plus- oder Minus-Terminal ist ungültig.".into());
+            errs.push("Plus or minus terminal is invalid.".into());
         }
         errs
     }

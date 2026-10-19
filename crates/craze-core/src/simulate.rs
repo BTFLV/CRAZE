@@ -106,14 +106,14 @@ pub fn simulate(
     let msg = |stage, m: &str| progress(Progress { stage, fraction: None, message: m.into() });
 
     let t0 = Instant::now();
-    msg(Stage::Rasterize, "Layout wird gerastert …");
+    msg(Stage::Rasterize, "Rasterizing layout …");
     let raster = rasterize(layout, setup, settings.resolution)?;
     let grid = raster.grid;
     let time_raster_ms = t0.elapsed().as_secs_f64() * 1e3;
     check()?;
 
     let t1 = Instant::now();
-    msg(Stage::Build, "Widerstandsnetz wird aufgebaut …");
+    msg(Stage::Build, "Building resistor network …");
     let names: Vec<String> = setup.terminals.iter().map(|t| t.name.clone()).collect();
     let net = Network::build(&raster, setup.source, setup.sink, &names)?;
     let (a, b) = net.assemble();
@@ -128,17 +128,17 @@ pub fn simulate(
         SolverKind::Auto => n <= AUTO_DIRECT_LIMIT,
     };
     let (x, used, iterations) = if use_direct {
-        msg(Stage::Solve, &format!("Gleichungssystem mit {n} Unbekannten wird direkt gelöst …"));
+        msg(Stage::Solve, &format!("Solving {n} unknowns directly …"));
         (solve_direct(&a, &b)?, UsedSolver::Direct, 0)
     } else {
-        msg(Stage::Solve, &format!("Gleichungssystem mit {n} Unbekannten wird iterativ gelöst …"));
+        msg(Stage::Solve, &format!("Solving {n} unknowns iteratively …"));
         let tol = settings.tolerance;
         let cb = |it: u32, rel: f64| {
             let frac = if rel > 0.0 { (rel.log10() / tol.log10()).clamp(0.0, 1.0) } else { 1.0 };
             progress(Progress {
                 stage: Stage::Solve,
                 fraction: Some(frac),
-                message: format!("Iteration {it}, Residuum {rel:.1e}"),
+                message: format!("Iteration {it}, residual {rel:.1e}"),
             });
         };
         let (x, it, _) = solve_pcg(&a, &b, None, tol, settings.max_iterations, cancel, &cb)?;
@@ -149,11 +149,11 @@ pub fn simulate(
     check()?;
 
     let t3 = Instant::now();
-    msg(Stage::Postprocess, "Ergebnisse werden berechnet …");
+    msg(Stage::Postprocess, "Computing results …");
     let term_v = net.terminal_potentials(&x);
     let (fields, i_source, i_sink) = compute_fields(&net, &raster.conductor, &x, &term_v);
     if !(i_source > 0.0) {
-        return Err(CrazeError::Solver("Es fließt kein Strom – ist die Leiterbahn unterbrochen?".into()));
+        return Err(CrazeError::Solver("No current flows. Is the trace interrupted?".into()));
     }
     let squares = 1.0 / i_source;
     let current_balance_error = ((i_source - i_sink) / i_source).abs();
@@ -168,7 +168,7 @@ pub fn simulate(
         if px_per_w < MIN_PIXELS_PER_WIDTH {
             suggested = Some(needed.div_ceil(100) * 100);
             warnings.push(format!(
-                "Die schmalste Leiterbahn ist nur {px_per_w:.1} Pixel breit. Für genaue Ergebnisse mindestens {} Pixel Auflösung verwenden.",
+                "The narrowest trace is only {px_per_w:.1} pixels wide. Use a resolution of at least {} pixels for accurate results.",
                 needed.div_ceil(100) * 100
             ));
         }

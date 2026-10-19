@@ -4,6 +4,7 @@
   import { openPath } from "@tauri-apps/plugin-opener";
   import { store, type FieldKind } from "../../lib/store.svelte";
   import { materialName, t } from "../../lib/i18n";
+  import { localize } from "../../lib/messages";
   import { duration, num, sci, si, sig } from "../../lib/format";
   import { electrical, sheetResistance, volumeCurrentFactor } from "../../lib/physics";
   import { COLORMAPS, TERMINAL_COLORS } from "../../lib/colormaps";
@@ -144,7 +145,7 @@
       <div class="hint warn"><TriangleAlert size={14} /><span>{t("results.stale")}</span></div>
     {/if}
     {#each s.warnings as w (w)}
-      <div class="hint warn"><TriangleAlert size={14} /><span>{w}</span></div>
+      <div class="hint warn"><TriangleAlert size={14} /><span>{localize(w)}</span></div>
     {/each}
   </div>
 

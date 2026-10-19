@@ -114,12 +114,12 @@ fn material_library() -> Vec<Material> {
 
 #[tauri::command]
 fn write_text_file(path: String, contents: String) -> CmdResult<()> {
-    std::fs::write(&path, contents).map_err(|e| format!("Speichern fehlgeschlagen: {e}"))
+    std::fs::write(&path, contents).map_err(|e| format!("Saving failed: {e}"))
 }
 
 #[tauri::command]
 fn read_text_file(path: String) -> CmdResult<String> {
-    std::fs::read_to_string(&path).map_err(|e| format!("Datei kann nicht gelesen werden: {e}"))
+    std::fs::read_to_string(&path).map_err(|e| format!("Cannot read the file: {e}"))
 }
 
 /// Writes base64 encoded data (e.g. a PNG data URL).
@@ -127,7 +127,7 @@ fn read_text_file(path: String) -> CmdResult<String> {
 fn write_base64_file(path: String, data: String) -> CmdResult<()> {
     let payload = data.split_once(',').map(|(_, d)| d).unwrap_or(&data);
     let bytes = base64::engine::general_purpose::STANDARD.decode(payload).map_err(|e| e.to_string())?;
-    std::fs::write(&path, bytes).map_err(|e| format!("Speichern fehlgeschlagen: {e}"))
+    std::fs::write(&path, bytes).map_err(|e| format!("Saving failed: {e}"))
 }
 
 fn prefs_path(app: &AppHandle) -> CmdResult<PathBuf> {

@@ -53,11 +53,11 @@ pub fn optimize(
     let keys: HashSet<LayerKey> = p.setup.conductor_keys().into_iter().collect();
     if p.library.count_paths(&keys) == 0 {
         return Err(CrazeError::Setup(
-            "Die Optimierung verändert Pfadbreiten, aber auf den Leiter-Layern gibt es keine Pfade (nur Polygone).".into(),
+            "The optimization changes path widths, but the conductor layers contain no paths (only polygons).".into(),
         ));
     }
     if !(p.target_ohm > 0.0) || !(p.sheet_resistance > 0.0) {
-        return Err(CrazeError::Setup("Zielwiderstand und Flächenwiderstand müssen positiv sein.".into()));
+        return Err(CrazeError::Setup("Target resistance and sheet resistance must be positive.".into()));
     }
 
     let eval = |s: f64| -> Result<f64> {

@@ -215,7 +215,7 @@ impl Network {
         let n_pix = nx * ny;
         let nt = raster.terminals.len();
         if source >= nt || sink >= nt {
-            return Err(CrazeError::Setup("Plus- oder Minus-Terminal fehlt.".into()));
+            return Err(CrazeError::Setup("Plus or minus terminal is missing.".into()));
         }
 
         // --- Classify pixels ---------------------------------------------------------
@@ -263,7 +263,7 @@ impl Network {
                         if t2 >= 0 && t2 != t {
                             let name = |i: i32| terminal_names.get(i as usize).cloned().unwrap_or_default();
                             return Err(CrazeError::Setup(format!(
-                                "Die Terminals „{}“ und „{}“ berühren sich (Kurzschluss). Bitte die Kontaktflächen trennen.",
+                                "The terminals “{}” and “{}” touch each other (short circuit). Please separate the contact pads.",
                                 name(t),
                                 name(t2)
                             )));
@@ -284,7 +284,7 @@ impl Network {
         }
         let total_conductor_nodes = node_pixel.len();
         if total_conductor_nodes == 0 {
-            return Err(CrazeError::Setup("Auf den Leiter-Layern wurde kein Material gefunden.".into()));
+            return Err(CrazeError::Setup("No material was found on the conductor layers.".into()));
         }
 
         // --- Sub-pixel geometry --------------------------------------------------------
@@ -408,7 +408,7 @@ impl Network {
         from_source.copy_from_slice(&term_reached);
         if !from_source[sink] {
             return Err(CrazeError::Setup(format!(
-                "Zwischen „{}“ und „{}“ besteht keine leitende Verbindung. Berühren beide Terminals die Leiterbahn?",
+                "There is no conducting path between “{}” and “{}”. Do both terminals touch the trace?",
                 terminal_names.get(source).cloned().unwrap_or_default(),
                 terminal_names.get(sink).cloned().unwrap_or_default()
             )));
@@ -467,7 +467,7 @@ impl Network {
         if removed_nodes > 0 {
             let pct = 100.0 * removed_nodes as f64 / total_conductor_nodes as f64;
             warnings.push(format!(
-                "{removed_nodes} Pixel ({pct:.1} %) Leitermaterial haben keine Verbindung zu einem Terminal und werden ignoriert."
+                "{removed_nodes} pixels ({pct:.1} %) of conductor have no connection to a terminal and are ignored."
             ));
         }
 

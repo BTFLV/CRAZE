@@ -1,87 +1,44 @@
 # Releasing
 
-Releases are built by GitHub Actions in `.github/workflows/build.yml`. There is one
-rolling release that always contains the newest build of `main`.
+Two workflows live in `.github/workflows`:
 
-## Workflow overview
+- `ci.yml` runs on every push to `main`, on pull requests and on demand: `svelte-check`,
+  `cargo test --workspace` (Ubuntu), and unsigned macOS (universal) and Windows builds that
+  are kept as workflow artifacts for 14 days. It publishes nothing.
+- `release.yml` runs when a tag `vX.Y.Z` is pushed and publishes the GitHub release
+  *CRAZE X.Y.Z*.
 
 ```mermaid
 flowchart LR
-    T["test<br/>ubuntu-latest<br/>svelte-check, cargo test"] --> M["build: macOS<br/>universal DMG"]
-    T --> W["build: Windows<br/>NSIS + MSI"]
-    M --> P["publish<br/>move tag 'latest',<br/>replace assets"]
+    C["check<br/>tag = version,<br/>CHANGELOG entry"] --> T["test"]
+    T --> M["macOS universal DMG<br/>signed + notarized"]
+    T --> W["Windows NSIS + MSI"]
+    M --> P["publish<br/>notes, SHA256SUMS"]
     W --> P
 ```
 
-| Trigger | test | build | publish |
-| --- | --- | --- | --- |
-| push to `main` | yes | yes | yes |
-| `workflow_dispatch` on `main` | yes | yes | yes |
-| `workflow_dispatch` on another branch, pull requests | yes | yes | no |
+## Making a release
 
-Runs for the same branch are queued rather than cancelled, so a publish is never
-interrupted halfway.
+1. Set the new version in `Cargo.toml` (`[workspace.package]`), `app/package.json`
+   (and `app/package-lock.json` via `npm install`) and `app/src-tauri/tauri.conf.json`;
+   run `cargo update -w` to update `Cargo.lock`.
+2. Add a section `## X.Y.Z — YYYY-MM-DD` to `CHANGELOG.md`.
+3. Commit, then tag and push: `git tag vX.Y.Z && git push origin main vX.Y.Z`.
 
-**test** builds the frontend (`app/dist` is required by Tauri's `generate_context!`, see
-[building.md](building.md#the-appdist-pitfall)), runs `svelte-check` and
-`cargo test --workspace` on Ubuntu with the WebKitGTK development packages.
+The release workflow fails early if the tag does not match all three versions or the
+changelog has no section for it. The release notes consist of that changelog section, a
+download table and the signing status of each platform. Assets are
+`CRAZE-X.Y.Z-macOS-universal.dmg`, `CRAZE-X.Y.Z-Windows-x64-setup.exe`,
+`CRAZE-X.Y.Z-Windows-x64.msi` and `SHA256SUMS.txt`. Pushing the same tag again (after
+deleting and re-creating it) refreshes the existing release.
 
-**build** runs `tauri-apps/tauri-action@v1` in build-only mode (no release inputs):
-
-- macOS (`macos-latest`): `--target universal-apple-darwin` with both Rust targets
-  installed; one DMG for Apple Silicon and Intel.
-- Windows (`windows-latest`): NSIS installer and MSI for x64.
-
-The bundles are copied to stable names (`CRAZE-macOS-universal.dmg`,
-`CRAZE-Windows-x64-setup.exe`, `CRAZE-Windows-x64.msi`) and uploaded as workflow
-artifacts together with a small file stating the signing status.
-
-**publish** handles the release with the GitHub CLI instead of letting tauri-action create
-it, because tauri-action does not move tags or remove outdated assets:
-
-1. Writes release notes with the commit SHA, subject and date, the build time, the file
-   table and the signing status of each platform.
-2. Moves the tag `latest` to the built commit (or creates it).
-3. Creates or edits the release *Latest CRAZE Release*: not a draft, not a prerelease,
-   marked as the latest release.
-4. Uploads the new files with `--clobber` and deletes any other assets, so the release
-   always holds exactly the files of the current build.
-
-Because the file names are stable, these links always point to the newest build:
-
-```text
-https://github.com/BTFLV/CRAZE/releases/download/latest/CRAZE-macOS-universal.dmg
-https://github.com/BTFLV/CRAZE/releases/download/latest/CRAZE-Windows-x64-setup.exe
-https://github.com/BTFLV/CRAZE/releases/download/latest/CRAZE-Windows-x64.msi
-```
-
-The tag `latest` is force-moved on every build. Local clones that fetched it need
-`git fetch --tags --force` to follow it.
-
-## Checklist for the first run
-
-The workflow can only be verified on GitHub. After the first push to `main`:
-
-1. *Settings → Actions → General*: Actions must be allowed. The publish job requests
-   `contents: write` itself; if the organization restricts workflow permissions to
-   read-only, allow write access there.
-2. In the run, the **Test** job should pass. It is the first job to compile the Tauri
-   crate on Linux; failures here are usually missing system packages.
-3. In **Build (macOS)** and **Build (Windows)**, the *Configure … signing* steps should
-   print a notice *unsigned* (no secrets yet). The *Collect* steps print the signature
-   check: an ad-hoc signature on macOS (Gatekeeper rejection is expected) and `NotSigned`
-   on Windows.
-4. **Publish rolling release** should create the tag `latest` and the release *Latest
-   CRAZE Release* with exactly three files, marked *Latest*.
-5. Download the DMG and the installer and check that they start after the confirmation
-   described in the README.
-6. Push a second commit and check that the tag moved, the release notes show the new SHA
-   and the release still has exactly three files.
+Before 1.0.0 the project published a rolling release on the tag `latest`; the publish job
+removes it if it still exists.
 
 ## Code signing
 
 Signing is optional. Without secrets, every step is skipped and the builds are unsigned.
-The *Configure … signing* steps export variables only when the corresponding secrets are
+The *Configure signing* steps export variables only when the corresponding secrets are
 non-empty, because the Tauri bundler also tries to sign when a signing variable exists
 with an empty value, and then fails the build.
 
@@ -98,14 +55,10 @@ Requires a membership in the Apple Developer Program.
 | `APPLE_SIGNING_IDENTITY` | Name of the identity, e.g. `Developer ID Application: Jane Doe (ABCDE12345)`. |
 
 Signing happens when `APPLE_CERTIFICATE` and `APPLE_SIGNING_IDENTITY` are set. For
-notarization add **one** of these sets:
+notarization add an App Store Connect API key: `APPLE_API_KEY` (key ID), `APPLE_API_ISSUER`
+(issuer ID) and `APPLE_API_KEY_CONTENT` (full text of the `AuthKey_<id>.p8` file).
 
-| Option | Secrets |
-| --- | --- |
-| Apple ID | `APPLE_ID` (Apple account e-mail), `APPLE_PASSWORD` (app-specific password), `APPLE_TEAM_ID` (10-character team ID) |
-| App Store Connect API key | `APPLE_API_KEY` (key ID), `APPLE_API_ISSUER` (issuer ID), `APPLE_API_KEY_P8` (full text of the `AuthKey_<id>.p8` file) |
-
-The workflow writes `APPLE_API_KEY_P8` to a file and passes its path as
+The workflow writes `APPLE_API_KEY_CONTENT` to a file and passes its path as
 `APPLE_API_KEY_PATH`, which is what Tauri expects.
 
 How to create them:
@@ -119,10 +72,7 @@ How to create them:
 3. `base64 -i certificate.p12 | pbcopy` and paste as `APPLE_CERTIFICATE`.
 4. `security find-identity -v -p codesigning` shows the exact identity name for
    `APPLE_SIGNING_IDENTITY`.
-5. Apple ID option: create an app-specific password at account.apple.com
-   (*Sign-In and Security → App-Specific Passwords*); the team ID is shown in the developer
-   account under *Membership*.
-6. API key option: App Store Connect → *Users and Access → Integrations → App Store Connect
+5. API key: App Store Connect → *Users and Access → Integrations → App Store Connect
    API*, create a key with the *Developer* role, note key ID and issuer ID, and download the
    `.p8` file (possible only once).
 
@@ -176,13 +126,3 @@ cloud signing service instead, for example **Azure Trusted Signing**:
 See the Tauri guide on [Windows code signing](https://v2.tauri.app/distribute/sign/windows/)
 for details. SmartScreen reputation builds up over time even for signed files; EV
 certificates and Trusted Signing establish it faster.
-
-## Versioned releases
-
-The rolling release is meant for "always the newest build". For a fixed version:
-
-1. Bump the version in `Cargo.toml`, `app/package.json` and
-   `app/src-tauri/tauri.conf.json`, and commit.
-2. After the workflow has run, download the artifacts of that run and create a release
-   with a version tag (e.g. `v2.1.0`) by hand, or extend the workflow with a trigger on
-   `v*` tags that publishes to that tag instead of `latest`.

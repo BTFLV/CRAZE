@@ -71,7 +71,7 @@ impl Library {
             records::read_binary(bytes)?
         } else {
             let text = std::str::from_utf8(bytes)
-                .map_err(|_| CrazeError::Gds("Datei ist weder binäres GDSII noch GDS-Text".into()))?;
+                .map_err(|_| CrazeError::Gds("the file is neither binary GDSII nor GDS text".into()))?;
             records::read_text(text)?
         };
         Self::from_records(records)
@@ -194,7 +194,7 @@ impl Library {
             }
         }
         if structures.is_empty() {
-            return Err(CrazeError::Gds("Keine Zellen (Strukturen) in der Datei gefunden".into()));
+            return Err(CrazeError::Gds("no cells (structures) found in the file".into()));
         }
         Ok(Library { name, db_unit_m, user_unit, structures, records })
     }
@@ -216,7 +216,7 @@ impl Library {
     /// Flattens the hierarchy below `top` into polygons in micrometers.
     pub fn flatten(&self, top: &str) -> Result<FlatLayout> {
         let index: HashMap<&str, &Structure> = self.structures.iter().map(|s| (s.name.as_str(), s)).collect();
-        let root = index.get(top).ok_or_else(|| CrazeError::Gds(format!("Zelle '{top}' nicht gefunden")))?;
+        let root = index.get(top).ok_or_else(|| CrazeError::Gds(format!("cell '{top}' not found")))?;
         let to_um = self.db_unit_m * 1e6;
         let mut out = FlatLayout { top_cell: top.to_string(), shapes: BTreeMap::new(), labels: vec![] };
         let mut stack = Vec::new();
@@ -295,7 +295,7 @@ fn flatten_rec<'a>(
     depth: usize,
 ) -> Result<()> {
     if depth > MAX_DEPTH || stack.contains(&s.name.as_str()) {
-        return Err(CrazeError::Gds(format!("Zirkuläre oder zu tiefe Zellreferenz bei '{}'", s.name)));
+        return Err(CrazeError::Gds(format!("circular or too deeply nested cell reference at '{}'", s.name)));
     }
     stack.push(&s.name);
     for e in &s.elements {
@@ -329,14 +329,14 @@ fn flatten_rec<'a>(
             Element::SRef { name, trans, origin } => {
                 let child = index
                     .get(name.as_str())
-                    .ok_or_else(|| CrazeError::Gds(format!("Referenzierte Zelle '{name}' fehlt")))?;
+                    .ok_or_else(|| CrazeError::Gds(format!("referenced cell '{name}' is missing")))?;
                 let ct = t.then(&trans.affine(*origin));
                 flatten_rec(index, child, &ct, out, stack, depth + 1)?;
             }
             Element::ARef { name, trans, cols, rows, xy } => {
                 let child = index
                     .get(name.as_str())
-                    .ok_or_else(|| CrazeError::Gds(format!("Referenzierte Zelle '{name}' fehlt")))?;
+                    .ok_or_else(|| CrazeError::Gds(format!("referenced cell '{name}' is missing")))?;
                 let col_step = (xy[1] - xy[0]) / *cols as f64;
                 let row_step = (xy[2] - xy[0]) / *rows as f64;
                 for r in 0..*rows {

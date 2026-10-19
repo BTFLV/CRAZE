@@ -2,6 +2,7 @@
   import { LoaderCircle } from "@lucide/svelte";
   import { store } from "../lib/store.svelte";
   import { t } from "../lib/i18n";
+  import { localize } from "../lib/messages";
   import { length, si } from "../lib/format";
 </script>
 
@@ -9,7 +10,7 @@
   <div class="left">
     {#if store.job}
       <LoaderCircle size={13} class="spin" />
-      <span>{store.job.message || t("simulate.running")}</span>
+      <span>{localize(store.job.message) || t("simulate.running")}</span>
       {#if store.job.fraction != null}
         <div class="bar"><div style:width="{store.job.fraction * 100}%"></div></div>
       {/if}
@@ -27,7 +28,7 @@
       <span>R□ = {si(store.sheetResistance, "Ω")}</span>
       <span>{store.temperature} °C</span>
     {/if}
-    <span class="muted">v2.0</span>
+    <span class="muted">v{__APP_VERSION__}</span>
   </div>
 </footer>
 
